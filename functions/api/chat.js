@@ -10,10 +10,11 @@
 //     GEMINI_API_KEY      … https://aistudio.google.com で発行
 //
 // 動作:
-//   Groq → OpenRouter → Gemini の順に試し、上限エラー(429)や
+//   基本は Groq → OpenRouter → Gemini の順に試し、上限エラー(429)や
 //   一時的な障害が出たら、自動的に次の候補に切り替えます。
-//   フロント側(index.html)からは常に同じ形の返事が返るので、
-//   index.html は一切変更不要です。
+//   フロント側から "preferred"(例: "groq")が送られてきた場合は、
+//   そのAIを最優先で試し、ダメなら残りを順番に試します。
+//   実際に答えたAIの名前は、レスポンスの "provider" に入れて返します。
 
 const MAX_TURNS = 60;
 
@@ -27,7 +28,7 @@ export async function onRequestPost(context) {
     return jsonError("リクエストの形式が正しくありません。", 400);
   }
 
-  const { system, messages } = body || {};
+  const { system, messages, preferred } = body || {};
 
   if (!Array.isArray(messages) || messages.length === 0) {
     return jsonError("messages が必要です。", 400);
@@ -37,11 +38,20 @@ export async function onRequestPost(context) {
     return jsonError("この会話は上限に達しました。終了してもう一度始めてください。", 400);
   }
 
-  const providers = [
+  let providers = [
     { name: "groq", run: () => callGroq(env, system, messages) },
     { name: "openrouter", run: () => callOpenRouter(env, system, messages) },
     { name: "gemini", run: () => callGemini(env, system, messages) },
   ];
+
+  // フロント側で生徒が選んだ相手(preferred)があれば、それを最優先で試す。
+  // 見つからない場合はそのまま元の順番(groq→openrouter→gemini)を使う。
+  if (preferred) {
+    const chosen = providers.find(p => p.name === preferred);
+    if (chosen) {
+      providers = [chosen, ...providers.filter(p => p.name !== preferred)];
+    }
+  }
 
   let lastError = null;
 
@@ -50,7 +60,8 @@ export async function onRequestPost(context) {
       const text = await provider.run();
       if (text) {
         // フロント側(index.html)はこの形("content"配列)を前提にしている
-        return new Response(JSON.stringify({ content: [{ type: "text", text }] }), {
+        // provider には実際に答えたAI("groq"/"openrouter"/"gemini")が入る
+        return new Response(JSON.stringify({ content: [{ type: "text", text }], provider: provider.name }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
