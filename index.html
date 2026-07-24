@@ -386,6 +386,11 @@
     <div class="block-label">シーンを選ぶ</div>
     <div class="scene-grid" id="sceneGrid"></div>
 
+    <div id="styleBlock" style="margin-top:28px;">
+      <div class="block-label">話し方を選ぶ(フリートークのみ)</div>
+      <div class="level-row" id="styleRow"></div>
+    </div>
+
     <div id="categoryBlock" style="display:none; margin-top:28px;">
       <div class="block-label">カテゴリを選ぶ(その回で扱う質問の範囲。複数選択可)</div>
       <div class="scene-grid" id="categoryGrid"></div>
@@ -403,6 +408,7 @@
       <div class="tag-group">
         <span class="tag-pill" id="tagLevel"></span>
         <span class="tag-pill" id="tagSpeed"></span>
+        <span class="tag-pill" id="tagStyle" style="display:none;"></span>
         <span class="tag-pill" id="tagScene"></span>
       </div>
       <button class="end-link" id="endBtn">終了する</button>
@@ -454,10 +460,19 @@ const PARTNERS = [
 ];
 
 const LEVELS = [
-  { id:'beginner', name:'初級', desc:'やさしい言葉で、ゆっくり話します' },
-  { id:'intermediate', name:'中級', desc:'自然な速さの会話で練習します' },
-  { id:'advanced', name:'上級', desc:'幅広い話題・敬語も交えます' },
+  { id:'beginner', name:'初級', desc:'やさしい語彙と短い文で話します' },
+  { id:'intermediate', name:'中級', desc:'日常でよく使う、自然な語彙で話します' },
+  { id:'advanced', name:'上級', desc:'幅広い話題に対応する、豊かな語彙で話します' },
 ];
+
+const STYLES = [
+  { id:'keigo', name:'敬語で話す', desc:'丁寧な「です・ます」調です' },
+  { id:'casual', name:'友達と話す', desc:'親しい間柄の、くだけた話し方です' },
+];
+const STYLE_INSTRUCTIONS = {
+  keigo: '話し方: 丁寧な敬語(「です・ます」調)で話してください。',
+  casual: '話し方: 親しい友達同士のような、くだけた話し方(タメ口)で話してください。',
+};
 
 const SCENES = [
   { id:'free', kanji:'話', name:'フリートーク', prompt:'自由なフリートークです。学習者の日常、興味、最近のできごとなどについて質問しながら、自然に会話を広げてください。' },
@@ -557,9 +572,9 @@ const QUESTION_SETS = [
 let selectedCategories = new Set();
 
 const LEVEL_INSTRUCTIONS = {
-  beginner: 'とても「やさしい日本語」を使ってください。基本的で身近な語彙と短い文を使い、ゆっくり分かりやすい話し方を意識してください。難しい漢字語彙や複雑な言い回しは避けてください。',
-  intermediate: '自然な速さと語彙で話してください。日常会話でよく使う表現を使いつつ、極端に難しい専門用語や込み入った言い回しは避けてください。',
-  advanced: '自然で豊かな日本語で話してください。慣用表現や敬語も適度に交え、幅広い話題に対応してください。',
+  beginner: 'とても「やさしい日本語」を使ってください。基本的で身近な語彙と短い文を使ってください。難しい漢字語彙や複雑な言い回しは避けてください。',
+  intermediate: '自然な語彙で話してください。日常会話でよく使う表現を使いつつ、極端に難しい専門用語や込み入った言い回しは避けてください。',
+  advanced: '自然で豊かな語彙で話してください。幅広い話題や、やや込み入った言い回しにも対応してください。',
 };
 
 const SPEEDS = [
@@ -575,6 +590,7 @@ const PARTNER_NAME = Object.fromEntries(PARTNERS.map(p=>[p.id, p.name]));
 let selectedPartner = null;
 let selectedLevel = null;
 let selectedSpeed = null;
+let selectedStyle = null;
 let selectedScene = null;
 let messages = [];      // Claude APIに送る会話履歴
 let recognition = null;
@@ -624,6 +640,20 @@ SPEEDS.forEach(sp=>{
   speedRow.appendChild(el);
 });
 
+const styleRow = document.getElementById('styleRow');
+STYLES.forEach(st=>{
+  const el = document.createElement('div');
+  el.className = 'level-card';
+  el.dataset.id = st.id;
+  el.innerHTML = `<div class="lv-name">${st.name}</div><div class="lv-desc">${st.desc}</div>`;
+  el.addEventListener('click', ()=>{
+    selectedStyle = st.id;
+    document.querySelectorAll('#styleRow .level-card').forEach(c=>c.classList.remove('selected'));
+    el.classList.add('selected');
+  });
+  styleRow.appendChild(el);
+});
+
 const sceneGrid = document.getElementById('sceneGrid');
 SCENES.forEach(sc=>{
   const el = document.createElement('div');
@@ -636,6 +666,7 @@ SCENES.forEach(sc=>{
     el.classList.add('selected');
     const catBlock = document.getElementById('categoryBlock');
     catBlock.style.display = (sc.id === 'school_interview') ? 'block' : 'none';
+    document.getElementById('styleBlock').style.display = (sc.id === 'free') ? 'block' : 'none';
   });
   sceneGrid.appendChild(el);
 });
@@ -663,6 +694,7 @@ QUESTION_SETS.forEach(cat=>{
 partnerRow.children[0].click();
 levelRow.children[0].click();
 speedRow.children[1].click(); // 「ふつう」をデフォルトに
+styleRow.children[0].click(); // 「敬語で話す」をデフォルトに
 sceneGrid.children[0].click();
 
 /* ===================== 音声認識・音声合成の準備 ===================== */
@@ -714,6 +746,14 @@ document.getElementById('startBtn').addEventListener('click', async ()=>{
   document.getElementById('tagLevel').textContent = lv.name;
   document.getElementById('tagSpeed').textContent = sp.name;
   document.getElementById('tagScene').textContent = sc.name;
+  const tagStyleEl = document.getElementById('tagStyle');
+  if (sc.id === 'free'){
+    const st = STYLES.find(s=>s.id===selectedStyle);
+    tagStyleEl.textContent = st.name;
+    tagStyleEl.style.display = 'inline-block';
+  } else {
+    tagStyleEl.style.display = 'none';
+  }
 
   if (!SR){
     document.getElementById('kbRow').classList.add('show');
@@ -728,8 +768,10 @@ document.getElementById('startBtn').addEventListener('click', async ()=>{
 function buildSystemPrompt(sc){
   if (sc.id === 'school_interview') return buildSchoolInterviewPrompt();
 
+  const styleLine = (sc.id === 'free') ? `\n${STYLE_INSTRUCTIONS[selectedStyle]}` : '';
+
   return `あなたは日本語学習者の会話練習の相手をするAIパートナーです。
-${LEVEL_INSTRUCTIONS[selectedLevel]}
+${LEVEL_INSTRUCTIONS[selectedLevel]}${styleLine}
 
 シーン設定: ${sc.prompt}
 
