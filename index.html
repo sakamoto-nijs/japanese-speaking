@@ -364,12 +364,22 @@
 
   <div class="eyebrow">AI CONVERSATION PARTNER</div>
   <h1 class="title">話してみよう</h1>
-  <p class="subtitle">AIのアバター「あかり」と、声で日本語を話す練習をしましょう。</p>
+  <p class="subtitle">AIパートナーと、声で日本語を話す練習をしましょう。</p>
 
   <!-- ===== セットアップ ===== -->
   <section id="setup">
-    <div class="block-label">レベルを選ぶ</div>
+    <div class="block-label">話す相手を選ぶ(混雑時は自動的に他の相手に代わることがあります)</div>
+    <div class="level-row" id="partnerRow"></div>
+
+    <hr class="hairline">
+
+    <div class="block-label">レベルを選ぶ(言葉の難しさ)</div>
     <div class="level-row" id="levelRow"></div>
+
+    <hr class="hairline">
+
+    <div class="block-label">話す速さを選ぶ</div>
+    <div class="level-row" id="speedRow"></div>
 
     <hr class="hairline">
 
@@ -392,6 +402,7 @@
     <div class="session-topbar">
       <div class="tag-group">
         <span class="tag-pill" id="tagLevel"></span>
+        <span class="tag-pill" id="tagSpeed"></span>
         <span class="tag-pill" id="tagScene"></span>
       </div>
       <button class="end-link" id="endBtn">終了する</button>
@@ -436,6 +447,12 @@
 
 <script>
 /* ===================== データ定義 ===================== */
+const PARTNERS = [
+  { id:'groq', name:'さくら', desc:'話し相手の1人です' },
+  { id:'openrouter', name:'さつき', desc:'話し相手の1人です' },
+  { id:'gemini', name:'あかり', desc:'話し相手の1人です' },
+];
+
 const LEVELS = [
   { id:'beginner', name:'初級', desc:'やさしい言葉で、ゆっくり話します' },
   { id:'intermediate', name:'中級', desc:'自然な速さの会話で練習します' },
@@ -545,10 +562,19 @@ const LEVEL_INSTRUCTIONS = {
   advanced: '自然で豊かな日本語で話してください。慣用表現や敬語も適度に交え、幅広い話題に対応してください。',
 };
 
-const LEVEL_RATE = { beginner:0.82, intermediate:1.0, advanced:1.08 };
+const SPEEDS = [
+  { id:'slow', name:'ゆっくり', desc:'一語一語はっきりと話します', rate:0.78 },
+  { id:'normal', name:'ふつう', desc:'自然な速さで話します', rate:1.0 },
+  { id:'fast', name:'はやい', desc:'実際の会話に近い速さです', rate:1.18 },
+];
+const SPEED_RATE = Object.fromEntries(SPEEDS.map(s=>[s.id, s.rate]));
+
+const PARTNER_NAME = Object.fromEntries(PARTNERS.map(p=>[p.id, p.name]));
 
 /* ===================== 状態 ===================== */
+let selectedPartner = null;
 let selectedLevel = null;
+let selectedSpeed = null;
 let selectedScene = null;
 let messages = [];      // Claude APIに送る会話履歴
 let recognition = null;
@@ -556,6 +582,20 @@ let isRecording = false;
 let jaVoice = null;
 
 /* ===================== セットアップ画面の構築 ===================== */
+const partnerRow = document.getElementById('partnerRow');
+PARTNERS.forEach(p=>{
+  const el = document.createElement('div');
+  el.className = 'level-card';
+  el.dataset.id = p.id;
+  el.innerHTML = `<div class="lv-name">${p.name}</div><div class="lv-desc">${p.desc}</div>`;
+  el.addEventListener('click', ()=>{
+    selectedPartner = p.id;
+    document.querySelectorAll('#partnerRow .level-card').forEach(c=>c.classList.remove('selected'));
+    el.classList.add('selected');
+  });
+  partnerRow.appendChild(el);
+});
+
 const levelRow = document.getElementById('levelRow');
 LEVELS.forEach(lv=>{
   const el = document.createElement('div');
@@ -568,6 +608,20 @@ LEVELS.forEach(lv=>{
     el.classList.add('selected');
   });
   levelRow.appendChild(el);
+});
+
+const speedRow = document.getElementById('speedRow');
+SPEEDS.forEach(sp=>{
+  const el = document.createElement('div');
+  el.className = 'level-card';
+  el.dataset.id = sp.id;
+  el.innerHTML = `<div class="lv-name">${sp.name}</div><div class="lv-desc">${sp.desc}</div>`;
+  el.addEventListener('click', ()=>{
+    selectedSpeed = sp.id;
+    document.querySelectorAll('#speedRow .level-card').forEach(c=>c.classList.remove('selected'));
+    el.classList.add('selected');
+  });
+  speedRow.appendChild(el);
 });
 
 const sceneGrid = document.getElementById('sceneGrid');
@@ -606,7 +660,9 @@ QUESTION_SETS.forEach(cat=>{
 });
 
 /* デフォルト選択 */
+partnerRow.children[0].click();
 levelRow.children[0].click();
+speedRow.children[1].click(); // 「ふつう」をデフォルトに
 sceneGrid.children[0].click();
 
 /* ===================== 音声認識・音声合成の準備 ===================== */
@@ -634,7 +690,7 @@ if (SR){
 
 /* ===================== はじめるボタン ===================== */
 document.getElementById('startBtn').addEventListener('click', async ()=>{
-  if (!selectedLevel || !selectedScene) return;
+  if (!selectedPartner || !selectedLevel || !selectedSpeed || !selectedScene) return;
 
   const setupNotice = document.getElementById('setupNotice');
 
@@ -653,8 +709,10 @@ document.getElementById('startBtn').addEventListener('click', async ()=>{
   document.getElementById('session').style.display = 'block';
 
   const lv = LEVELS.find(l=>l.id===selectedLevel);
+  const sp = SPEEDS.find(s=>s.id===selectedSpeed);
   const sc = SCENES.find(s=>s.id===selectedScene);
   document.getElementById('tagLevel').textContent = lv.name;
+  document.getElementById('tagSpeed').textContent = sp.name;
   document.getElementById('tagScene').textContent = sc.name;
 
   if (!SR){
@@ -670,7 +728,7 @@ document.getElementById('startBtn').addEventListener('click', async ()=>{
 function buildSystemPrompt(sc){
   if (sc.id === 'school_interview') return buildSchoolInterviewPrompt();
 
-  return `あなたは日本語学習者の会話練習の相手をするAIアバター「あかり」です。
+  return `あなたは日本語学習者の会話練習の相手をするAIパートナーです。
 ${LEVEL_INSTRUCTIONS[selectedLevel]}
 
 シーン設定: ${sc.prompt}
@@ -691,7 +749,7 @@ function buildSchoolInterviewPrompt(){
     return `【${cat.label}】\n${qs}`;
   }).join('\n\n');
 
-  return `あなたは日本語学習者の面接練習の相手をするAIアバター「あかり」です。ここでは、専門学校の入学面接を担当する面接官として振る舞います。
+  return `あなたは日本語学習者の面接練習の相手をするAIパートナーです。ここでは、専門学校の入学面接を担当する面接官として振る舞います。
 ${LEVEL_INSTRUCTIONS[selectedLevel]}
 
 この面接では、以下の質問リストを、書かれている順番のとおりに、上から一つずつ聞いてください。
@@ -712,14 +770,15 @@ ${questionListText}
 async function beginConversation(sc){
   setState('thinking');
   messages = [{ role:'user', content:'(会話を始めてください。設定に合わせて、挨拶や最初のひとことから話しかけてください。)' }];
-  const reply = await callClaude(messages, buildSystemPrompt(sc));
+  const { text: reply, provider } = await callClaude(messages, buildSystemPrompt(sc));
   messages.push({ role:'assistant', content: reply });
-  addCaption('ai', reply);
+  const aiName = PARTNER_NAME[provider] || PARTNER_NAME[selectedPartner] || 'AI';
+  addCaption('ai', reply, aiName);
   await speak(reply);
   setState('idle');
 }
 
-/* ===================== Claude API 呼び出し ===================== */
+/* ===================== AI API 呼び出し ===================== */
 async function callClaude(msgHistory, systemPrompt){
   try{
     const response = await fetch("/api/chat", {
@@ -727,19 +786,23 @@ async function callClaude(msgHistory, systemPrompt){
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         system: systemPrompt,
-        messages: msgHistory
+        messages: msgHistory,
+        preferred: selectedPartner
       })
     });
     if (!response.ok){
       console.error('API error status', response.status);
-      return 'すみません、少し調子が悪いようです。もう一度試してもらえますか。';
+      return { text:'すみません、少し調子が悪いようです。もう一度試してもらえますか。', provider:null };
     }
     const data = await response.json();
     const text = (data.content || []).map(b=>b.text||'').join('\n').trim();
-    return text || 'すみません、うまく聞き取れませんでした。もう一度お願いできますか。';
+    return {
+      text: text || 'すみません、うまく聞き取れませんでした。もう一度お願いできますか。',
+      provider: data.provider || null
+    };
   }catch(err){
     console.error(err);
-    return 'すみません、少し調子が悪いようです。もう一度試してもらえますか。';
+    return { text:'すみません、少し調子が悪いようです。もう一度試してもらえますか。', provider:null };
   }
 }
 
@@ -751,7 +814,7 @@ function speak(text){
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = 'ja-JP';
     if (jaVoice) utter.voice = jaVoice;
-    utter.rate = LEVEL_RATE[selectedLevel] || 1.0;
+    utter.rate = SPEED_RATE[selectedSpeed] || 1.0;
     utter.onend = ()=>{ resolve(); };
     utter.onerror = ()=>{ resolve(); };
     speechSynthesis.speak(utter);
@@ -774,10 +837,11 @@ function setState(state){
 
 /* ===================== 字幕表示 ===================== */
 const captionsEl = document.getElementById('captions');
-function addCaption(who, text){
+function addCaption(who, text, aiName){
   const line = document.createElement('div');
   line.className = 'caption-line ' + who;
-  line.innerHTML = `<span class="speaker">${who==='ai' ? 'あかり' : 'あなた'}</span>${escapeHtml(text)}`;
+  const speakerLabel = who === 'ai' ? (aiName || 'AI') : 'あなた';
+  line.innerHTML = `<span class="speaker">${speakerLabel}</span>${escapeHtml(text)}`;
   captionsEl.appendChild(line);
   captionsEl.scrollTop = captionsEl.scrollHeight;
 }
@@ -832,9 +896,10 @@ async function handleUserUtterance(text){
   messages.push({ role:'user', content:text });
   setState('thinking');
   const sc = SCENES.find(s=>s.id===selectedScene);
-  const reply = await callClaude(messages, buildSystemPrompt(sc));
+  const { text: reply, provider } = await callClaude(messages, buildSystemPrompt(sc));
   messages.push({ role:'assistant', content:reply });
-  addCaption('ai', reply);
+  const aiName = PARTNER_NAME[provider] || PARTNER_NAME[selectedPartner] || 'AI';
+  addCaption('ai', reply, aiName);
   await speak(reply);
   setState('idle');
 }
