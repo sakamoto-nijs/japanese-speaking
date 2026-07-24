@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>話してみよう ― AIと日本語で話す練習</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;600;800&family=Zen+Kaku+Gothic+New:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F1ECE0;
+    --paper-deep:#E6DDC8;
+    --paper-line: rgba(33,31,27,0.08);
+    --ink:#211F1B;
+    --ink-soft:#5B564D;
+    --ink-faint:#8B8477;
+    --indigo:#2B4C6F;
+    --indigo-deep:#16283B;
+    --indigo-pale:#D7E1E6;
+    --indigo-pale-2:#BFCFD8;
+    --kurenai:#B5442E;
+    --kurenai-pale:#F1DAD2;
+    --gold:#C9A66B;
+    --radius-card: 10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Zen Kaku Gothic New', sans-serif;
+    min-height:100vh;
+    position:relative;
+    overflow-x:hidden;
+  }
+  /* 紙の質感 */
+  body::before{
+    content:"";
+    position:fixed; inset:0;
+    pointer-events:none;
+    opacity:0.5;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  }
+  .app{
+    max-width:720px;
+    margin:0 auto;
+    padding:48px 24px 80px;
+    position:relative;
+    z-index:1;
+  }
+  .eyebrow{
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.22em;
+    color:var(--ink-faint);
+    text-transform:uppercase;
+    text-align:center;
+    margin-bottom:14px;
+  }
+  h1.title{
+    font-family:'Shippori Mincho', serif;
+    font-weight:800;
+    font-size:44px;
+    text-align:center;
+    margin:0 0 10px;
+    letter-spacing:0.02em;
+    color:var(--indigo-deep);
+  }
+  p.subtitle{
+    text-align:center;
+    color:var(--ink-soft);
+    font-size:15px;
+    margin:0 0 44px;
+    line-height:1.8;
+  }
+  .hairline{
+    border:none;
+    border-top:1px solid var(--paper-line);
+    margin:36px 0;
+  }
+
+  /* ===== セットアップ画面 ===== */
+  #setup .block-label{
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    letter-spacing:0.1em;
+    color:var(--ink-faint);
+    margin-bottom:14px;
+  }
+  .level-row{
+    display:flex; gap:12px; flex-wrap:wrap; margin-bottom:8px;
+  }
+  .level-card{
+    flex:1 1 150px;
+    background:var(--paper);
+    border:1px solid var(--paper-line);
+    border-radius:var(--radius-card);
+    padding:18px 16px;
+    cursor:pointer;
+    transition:border-color .2s ease, background .2s ease, transform .15s ease;
+  }
+  .level-card:hover{ transform:translateY(-2px); }
+  .level-card .lv-name{
+    font-family:'Shippori Mincho', serif;
+    font-weight:600;
+    font-size:19px;
+    color:var(--indigo-deep);
+    margin-bottom:6px;
+  }
+  .level-card .lv-desc{
+    font-size:12.5px;
+    color:var(--ink-soft);
+    line-height:1.6;
+  }
+  .level-card.selected{
+    background:var(--indigo-deep);
+    border-color:var(--indigo-deep);
+  }
+  .level-card.selected .lv-name,
+  .level-card.selected .lv-desc{ color:var(--paper); }
+
+  .scene-grid{
+    display:flex; gap:10px; flex-wrap:wrap; margin-bottom:8px;
+  }
+  .scene-chip{
+    display:flex; align-items:center; gap:10px;
+    background:var(--paper);
+    border:1px solid var(--paper-line);
+    border-radius:999px;
+    padding:8px 16px 8px 8px;
+    cursor:pointer;
+    transition:border-color .2s ease, background .2s ease;
+  }
+  .scene-chip:hover{ border-color:var(--indigo-pale-2); }
+  .scene-chip .kanji-badge{
+    width:30px; height:30px;
+    border-radius:50%;
+    background:var(--indigo-pale);
+    color:var(--indigo-deep);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Shippori Mincho', serif;
+    font-weight:600;
+    font-size:15px;
+    flex-shrink:0;
+  }
+  .scene-chip .scene-name{ font-size:13.5px; color:var(--ink); white-space:nowrap; }
+  .scene-chip.selected{
+    background:var(--indigo-deep);
+    border-color:var(--indigo-deep);
+  }
+  .scene-chip.selected .kanji-badge{ background:var(--gold); color:var(--indigo-deep); }
+  .scene-chip.selected .scene-name{ color:var(--paper); }
+
+  .start-btn-wrap{ text-align:center; margin-top:44px; }
+  .start-btn{
+    font-family:'Shippori Mincho', serif;
+    font-size:18px;
+    font-weight:600;
+    letter-spacing:0.04em;
+    color:var(--paper);
+    background:var(--indigo-deep);
+    border:none;
+    padding:16px 48px;
+    border-radius:999px;
+    cursor:pointer;
+    transition:background .2s ease, transform .15s ease, box-shadow .2s ease;
+    box-shadow:0 6px 18px rgba(22,40,59,0.18);
+  }
+  .start-btn:hover{ background:var(--indigo); transform:translateY(-1px); }
+  .start-btn:disabled{ background:var(--ink-faint); cursor:not-allowed; box-shadow:none; }
+
+  /* ===== セッション画面 ===== */
+  #session{ display:none; }
+  .session-topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:34px;
+  }
+  .tag-group{ display:flex; gap:8px; }
+  .tag-pill{
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.05em;
+    color:var(--indigo-deep);
+    background:var(--indigo-pale);
+    padding:5px 12px;
+    border-radius:999px;
+  }
+  .end-link{
+    font-size:13px;
+    color:var(--ink-faint);
+    background:none; border:none; cursor:pointer;
+    text-decoration:underline;
+    text-underline-offset:3px;
+  }
+  .end-link:hover{ color:var(--kurenai); }
+
+  /* アバター: 水に墨が広がるイメージ */
+  .avatar-wrap{
+    display:flex; flex-direction:column; align-items:center;
+    margin-bottom:14px;
+  }
+  .avatar-svg{ width:220px; height:220px; overflow:visible; }
+  .avatar-core{ fill:var(--indigo-deep); }
+  .ripple{
+    fill:none;
+    stroke:var(--indigo);
+    stroke-width:1.4;
+    opacity:0;
+    transform-origin:110px 110px;
+  }
+  .rec-ring{
+    fill:none; stroke:var(--kurenai); stroke-width:2;
+    opacity:0; transform-origin:110px 110px;
+  }
+  .think-dash{
+    fill:none; stroke:var(--gold); stroke-width:2.2; stroke-linecap:round;
+    opacity:0; transform-origin:110px 110px;
+  }
+
+  [data-state="idle"] .avatar-core{ animation: breathe 4.2s ease-in-out infinite; }
+  @keyframes breathe{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.045); } }
+
+  [data-state="speaking"] .ripple{ animation: diffuse 2.1s ease-out infinite; }
+  [data-state="speaking"] .ripple.r2{ animation-delay:0.5s; }
+  [data-state="speaking"] .ripple.r3{ animation-delay:1s; }
+  [data-state="speaking"] .avatar-core{ animation: corepulse 1.05s ease-in-out infinite; }
+  @keyframes diffuse{
+    0%{ opacity:0.55; transform:scale(0.45); }
+    100%{ opacity:0; transform:scale(1.35); }
+  }
+  @keyframes corepulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.08); } }
+
+  [data-state="listening"] .rec-ring{ animation: recpulse 1.4s ease-in-out infinite; }
+  [data-state="listening"] .avatar-core{ fill:var(--kurenai); animation: corepulse 1s ease-in-out infinite; }
+  @keyframes recpulse{
+    0%{ opacity:0.6; transform:scale(0.9); }
+    70%{ opacity:0; transform:scale(1.25); }
+    100%{ opacity:0; transform:scale(1.25); }
+  }
+
+  [data-state="thinking"] .think-dash{ opacity:0.8; animation: spin 1.6s linear infinite; }
+  @keyframes spin{ from{ transform:rotate(0deg); } to{ transform:rotate(360deg); } }
+
+  .status-text{
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    letter-spacing:0.08em;
+    color:var(--ink-faint);
+    margin-top:6px;
+    height:16px;
+  }
+
+  /* 字幕 */
+  .captions{
+    min-height:170px;
+    max-height:260px;
+    overflow-y:auto;
+    padding:6px 2px 6px;
+    margin-bottom:30px;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .caption-line{
+    max-width:82%;
+    padding:10px 15px;
+    border-radius:var(--radius-card);
+    font-size:14.5px;
+    line-height:1.7;
+    animation: fadein .35s ease;
+  }
+  @keyframes fadein{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);} }
+  .caption-line.ai{
+    align-self:flex-start;
+    background:var(--indigo-pale);
+    color:var(--indigo-deep);
+    border-top-left-radius:2px;
+  }
+  .caption-line.user{
+    align-self:flex-end;
+    background:var(--kurenai-pale);
+    color:#6E2C1B;
+    border-top-right-radius:2px;
+  }
+  .caption-line .speaker{
+    display:block;
+    font-family:'JetBrains Mono', monospace;
+    font-size:10px;
+    opacity:0.6;
+    letter-spacing:0.06em;
+    margin-bottom:3px;
+  }
+  .caption-line.interim{ opacity:0.55; font-style:italic; }
+
+  /* マイク */
+  .mic-wrap{ display:flex; flex-direction:column; align-items:center; gap:14px; }
+  .mic-btn{
+    width:78px; height:78px;
+    border-radius:50%;
+    border:none;
+    background:var(--indigo-deep);
+    color:var(--paper);
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:background .2s ease, transform .15s ease;
+    box-shadow:0 8px 22px rgba(22,40,59,0.22);
+  }
+  .mic-btn:hover{ transform:translateY(-1px); }
+  .mic-btn.recording{ background:var(--kurenai); box-shadow:0 8px 22px rgba(181,68,46,0.3); }
+  .mic-btn:disabled{ background:var(--ink-faint); cursor:progress; }
+  .mic-hint{ font-size:12.5px; color:var(--ink-faint); }
+  .kb-toggle{
+    background:none; border:none; cursor:pointer;
+    font-size:12px; color:var(--ink-faint);
+    text-decoration:underline; text-underline-offset:3px;
+    margin-top:4px;
+  }
+  .kb-toggle:hover{ color:var(--indigo); }
+
+  .kb-row{
+    display:none;
+    gap:8px;
+    margin-top:16px;
+    max-width:440px;
+    margin-left:auto; margin-right:auto;
+  }
+  .kb-row.show{ display:flex; }
+  .kb-row input{
+    flex:1;
+    font-family:'Zen Kaku Gothic New', sans-serif;
+    font-size:14px;
+    padding:10px 14px;
+    border:1px solid var(--paper-line);
+    border-radius:8px;
+    background:var(--paper);
+    color:var(--ink);
+  }
+  .kb-row input:focus{ outline:2px solid var(--indigo-pale-2); }
+  .kb-row button{
+    font-family:'Zen Kaku Gothic New', sans-serif;
+    font-size:13px;
+    background:var(--indigo-deep);
+    color:var(--paper);
+    border:none;
+    border-radius:8px;
+    padding:0 18px;
+    cursor:pointer;
+  }
+
+  .notice{
+    text-align:center;
+    font-size:12.5px;
+    color:var(--kurenai);
+    margin-top:18px;
+    line-height:1.7;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation:none !important; transition:none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="eyebrow">AI CONVERSATION PARTNER</div>
+  <h1 class="title">話してみよう</h1>
+  <p class="subtitle">AIのアバター「あかり」と、声で日本語を話す練習をしましょう。</p>
+
+  <!-- ===== セットアップ ===== -->
+  <section id="setup">
+    <div class="block-label">レベルを選ぶ</div>
+    <div class="level-row" id="levelRow"></div>
+
+    <hr class="hairline">
+
+    <div class="block-label">シーンを選ぶ</div>
+    <div class="scene-grid" id="sceneGrid"></div>
+
+    <div id="categoryBlock" style="display:none; margin-top:28px;">
+      <div class="block-label">カテゴリを選ぶ(その回で扱う質問の範囲。複数選択可)</div>
+      <div class="scene-grid" id="categoryGrid"></div>
+    </div>
+
+    <div class="start-btn-wrap">
+      <button class="start-btn" id="startBtn">はじめる</button>
+    </div>
+    <div class="notice" id="setupNotice" style="display:none;"></div>
+  </section>
+
+  <!-- ===== セッション ===== -->
+  <section id="session">
+    <div class="session-topbar">
+      <div class="tag-group">
+        <span class="tag-pill" id="tagLevel"></span>
+        <span class="tag-pill" id="tagScene"></span>
+      </div>
+      <button class="end-link" id="endBtn">終了する</button>
+    </div>
+
+    <div class="avatar-wrap" data-state="idle" id="avatar">
+      <svg class="avatar-svg" viewBox="0 0 220 220">
+        <circle class="ripple r1" cx="110" cy="110" r="60"></circle>
+        <circle class="ripple r2" cx="110" cy="110" r="60"></circle>
+        <circle class="ripple r3" cx="110" cy="110" r="60"></circle>
+        <circle class="rec-ring" cx="110" cy="110" r="52"></circle>
+        <path class="think-dash" d="M 110 60 A 50 50 0 1 1 60 110" ></path>
+        <circle class="avatar-core" cx="110" cy="110" r="38"></circle>
+      </svg>
+      <div class="status-text" id="statusText">待機中…</div>
+    </div>
+
+    <div class="captions" id="captions"></div>
+
+    <div class="mic-wrap">
+      <button class="mic-btn" id="micBtn" title="タップして話す">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+          <line x1="12" y1="19" x2="12" y2="23"></line>
+          <line x1="8" y1="23" x2="16" y2="23"></line>
+        </svg>
+      </button>
+      <div class="mic-hint" id="micHint">タップして話しかけてください</div>
+      <button class="kb-toggle" id="kbToggle">キーボードで入力する</button>
+    </div>
+
+    <div class="kb-row" id="kbRow">
+      <input type="text" id="kbInput" placeholder="ここに日本語で入力…">
+      <button id="kbSend">送信</button>
+    </div>
+
+    <div class="notice" id="sessionNotice" style="display:none;"></div>
+  </section>
+
+</div>
+
+<script>
+/* ===================== データ定義 ===================== */
+const LEVELS = [
+  { id:'beginner', name:'初級', desc:'やさしい言葉で、ゆっくり話します' },
+  { id:'intermediate', name:'中級', desc:'自然な速さの会話で練習します' },
+  { id:'advanced', name:'上級', desc:'幅広い話題・敬語も交えます' },
+];
+
+const SCENES = [
+  { id:'free', kanji:'話', name:'フリートーク', prompt:'自由なフリートークです。学習者の日常、興味、最近のできごとなどについて質問しながら、自然に会話を広げてください。' },
+  { id:'restaurant', kanji:'食', name:'レストランで注文', prompt:'あなたはレストランの店員です。学習者はお客さんです。挨拶をして席に案内するところから始め、メニューを尋ねたりおすすめを提案したりして、注文のやり取りをロールプレイしてください。' },
+  { id:'directions', kanji:'道', name:'道を尋ねる', prompt:'あなたは道で声をかけられた親切な通行人です。学習者があなたに道を尋ねてくる、という設定です。「すみません」と話しかけられるところから会話を始めてください。' },
+  { id:'shopping', kanji:'買', name:'買い物', prompt:'あなたは洋服店の店員です。学習者はお客さんとして服を探しています。挨拶をして声をかけるところから会話を始めてください。' },
+  { id:'hotel', kanji:'宿', name:'ホテルのチェックイン', prompt:'あなたはホテルのフロントスタッフです。学習者はちょうどチェックインしようとしています。フロントでの挨拶から会話を始めてください。' },
+  { id:'friend', kanji:'友', name:'友達との週末の予定', prompt:'あなたは学習者の親しい友人です。今度の週末に何をするか、気軽な口調で話しかけるところから会話を始めてください。' },
+  { id:'interview', kanji:'職', name:'仕事の面接', prompt:'あなたは会社の面接官です。学習者は面接を受けに来ています。丁寧な言葉遣いで、面接の始まりの挨拶から会話を始めてください。' },
+  { id:'school_interview', kanji:'進', name:'専門学校 面接対策', prompt:null },
+];
+
+/* 専門学校 面接対策 用の想定質問集(提供資料より) */
+const QUESTION_SETS = [
+  { id:'A', label:'自己紹介・志望動機', questions:[
+    'かんたんな自己紹介をしてください。',
+    '日本へ留学しようと思ったのはなぜですか。',
+    '日本の生活はどうですか。',
+    'あなたが受験している学校の名前とコースの名前を言ってください。',
+    '志望動機を教えてください。',
+    'なぜ他の学校ではなく、この学校を選びましたか。',
+    'この学校のことをどのようにして知りましたか。',
+    'オープンキャンパスや学校説明会に参加しましたか。',
+    '専門学校でどんなことを勉強したいですか。また、がんばりたいですか。',
+    '専門学校での勉強を母国ではなくなぜ日本でやるのですか。',
+    '専門学校を卒業後の進路はどのように考えていますか。',
+    '将来、どんな仕事をしたいですか。',
+    '将来、目指している仕事に必要なスキルは何だと思いますか。',
+    '自分はどんな性格だと思いますか。',
+    'あなたの長所と短所を教えてください。',
+    '自己アピールをしてください。',
+  ]},
+  { id:'B', label:'アルバイト', questions:[
+    '今、アルバイトをしていますか。どこでしていますか。',
+    'アルバイトは一週間に何時間働いていますか。',
+    '専門学校に入学後も今のアルバイトを続けますか。',
+    'アルバイト先のお客さんや同僚とのコミュニケーションで困ったことはありますか。',
+    'アルバイトの経験から、どんなことを学びましたか。',
+    'アルバイトと勉強を両立するためにどのような工夫をしていますか。',
+    '毎月いくら貯金をしていますか。',
+  ]},
+  { id:'C', label:'経費支弁', questions:[
+    '専門学校の一年間の学費はいくらですか。',
+    '専門学校の学費はだれがはらいますか。いくらはらいますか。',
+    '生活費はだれがはらいますか。',
+    'ご両親の職業は何ですか。',
+    '日本にどうやってお金を送りますか。',
+    '進路に関してご両親と話し合いましたか。',
+    '日本での月々の生活費はいくらぐらいかかっていますか。',
+  ]},
+  { id:'D', label:'出席率', questions:[
+    'あなたの出席率は何％ですか。',
+    '学校を休んだり、遅刻したりした時の理由を教えてください。',
+    '専門学校入学後は出席率をどのように維持するつもりですか。',
+  ]},
+  { id:'E', label:'日本語学校', questions:[
+    '今通っている日本語学校の名前を教えてください。',
+    '日本語学校に入学したのはいつですか。',
+    '日本語学校はいつ卒業する予定ですか。',
+    '日本語学校でどんなことを勉強していますか。',
+    '日本語学校で毎日何時間勉強していますか。',
+    '自宅では毎日何時間勉強していますか。また、どのように勉強していますか。',
+    '何か日本語の資格を持っていますか。',
+    '日本語学校の成績はどうですか。',
+  ]},
+  { id:'F', label:'勉強', questions:[
+    '日本語の勉強で、一番難しいと思う点は何ですか。',
+    '専門学校の授業の日本語は理解できますか。',
+    '日本語以外に話せる言語はありますか。',
+    '得意な科目はなんですか。',
+    '苦手な科目はなんですか。',
+  ]},
+  { id:'G', label:'ルール・マナー', questions:[
+    '学校のルールを守ることについてどう思いますか。',
+    '友だちが授業中にスマホで遊んでいたらどうしますか。',
+    '日本にはどんなルールがありますか。',
+    '日本と母国でルールの違いで困ったことはありますか。',
+    '他の人と意見が違う場合、どうしますか。',
+  ]},
+  { id:'H', label:'生活', questions:[
+    '日本や日本語に興味を持ったのはなぜですか。',
+    '日本に来て驚いたことはありますか。',
+    '日本での生活の中で、一番大変なことは何ですか。',
+    '日本で困ったときは誰に相談しますか。',
+    '日本で友人はいますか。どのように知り合いましたか。',
+    '日本に来てから成長したと思う点はありますか。',
+    'あなたの国と日本の違いを3つ教えてください。',
+    '日本に来てから一番うれしかったこと、辛かったことをおしえてください。',
+  ]},
+  { id:'I', label:'面接の場での確認事項', questions:[
+    '今日の面接のために何か準備しましたか。',
+    '合格したら、必ず入学しますか。',
+    '最後に、自分をアピールしたいことや伝えたいことはありますか。',
+    '本校に対して何か質問はありますか。',
+  ]},
+];
+let selectedCategories = new Set();
+
+const LEVEL_INSTRUCTIONS = {
+  beginner: 'とても「やさしい日本語」を使ってください。基本的で身近な語彙と短い文を使い、ゆっくり分かりやすい話し方を意識してください。難しい漢字語彙や複雑な言い回しは避けてください。',
+  intermediate: '自然な速さと語彙で話してください。日常会話でよく使う表現を使いつつ、極端に難しい専門用語や込み入った言い回しは避けてください。',
+  advanced: '自然で豊かな日本語で話してください。慣用表現や敬語も適度に交え、幅広い話題に対応してください。',
+};
+
+const LEVEL_RATE = { beginner:0.82, intermediate:1.0, advanced:1.08 };
+
+/* ===================== 状態 ===================== */
+let selectedLevel = null;
+let selectedScene = null;
+let messages = [];      // Claude APIに送る会話履歴
+let recognition = null;
+let isRecording = false;
+let jaVoice = null;
+
+/* ===================== セットアップ画面の構築 ===================== */
+const levelRow = document.getElementById('levelRow');
+LEVELS.forEach(lv=>{
+  const el = document.createElement('div');
+  el.className = 'level-card';
+  el.dataset.id = lv.id;
+  el.innerHTML = `<div class="lv-name">${lv.name}</div><div class="lv-desc">${lv.desc}</div>`;
+  el.addEventListener('click', ()=>{
+    selectedLevel = lv.id;
+    document.querySelectorAll('.level-card').forEach(c=>c.classList.remove('selected'));
+    el.classList.add('selected');
+  });
+  levelRow.appendChild(el);
+});
+
+const sceneGrid = document.getElementById('sceneGrid');
+SCENES.forEach(sc=>{
+  const el = document.createElement('div');
+  el.className = 'scene-chip';
+  el.dataset.id = sc.id;
+  el.innerHTML = `<span class="kanji-badge">${sc.kanji}</span><span class="scene-name">${sc.name}</span>`;
+  el.addEventListener('click', ()=>{
+    selectedScene = sc.id;
+    document.querySelectorAll('.scene-grid#sceneGrid .scene-chip').forEach(c=>c.classList.remove('selected'));
+    el.classList.add('selected');
+    const catBlock = document.getElementById('categoryBlock');
+    catBlock.style.display = (sc.id === 'school_interview') ? 'block' : 'none';
+  });
+  sceneGrid.appendChild(el);
+});
+
+/* カテゴリ選択(複数選択可) */
+const categoryGrid = document.getElementById('categoryGrid');
+QUESTION_SETS.forEach(cat=>{
+  const el = document.createElement('div');
+  el.className = 'scene-chip';
+  el.dataset.id = cat.id;
+  el.innerHTML = `<span class="kanji-badge">${cat.id}</span><span class="scene-name">${cat.label}</span>`;
+  el.addEventListener('click', ()=>{
+    if (selectedCategories.has(cat.id)){
+      selectedCategories.delete(cat.id);
+      el.classList.remove('selected');
+    } else {
+      selectedCategories.add(cat.id);
+      el.classList.add('selected');
+    }
+  });
+  categoryGrid.appendChild(el);
+});
+
+/* デフォルト選択 */
+levelRow.children[0].click();
+sceneGrid.children[0].click();
+
+/* ===================== 音声認識・音声合成の準備 ===================== */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const hasTTS = 'speechSynthesis' in window;
+
+function pickJaVoice(){
+  const voices = speechSynthesis.getVoices();
+  jaVoice = voices.find(v=>v.lang==='ja-JP' && /Google/i.test(v.name))
+        || voices.find(v=>v.lang==='ja-JP')
+        || voices.find(v=>v.lang && v.lang.startsWith('ja'))
+        || null;
+}
+if (hasTTS){
+  pickJaVoice();
+  speechSynthesis.onvoiceschanged = pickJaVoice;
+}
+
+if (SR){
+  recognition = new SR();
+  recognition.lang = 'ja-JP';
+  recognition.interimResults = true;
+  recognition.continuous = false;
+}
+
+/* ===================== はじめるボタン ===================== */
+document.getElementById('startBtn').addEventListener('click', async ()=>{
+  if (!selectedLevel || !selectedScene) return;
+
+  const setupNotice = document.getElementById('setupNotice');
+
+  if (selectedScene === 'school_interview' && selectedCategories.size === 0){
+    setupNotice.style.display = 'block';
+    setupNotice.textContent = '面接対策では、カテゴリを1つ以上選んでください。';
+    return;
+  }
+  setupNotice.style.display = 'none';
+  if (!SR){
+    setupNotice.style.display = 'block';
+    setupNotice.textContent = 'お使いのブラウザは音声入力に対応していません。会話は開始できますが、発話はキーボード入力をご利用ください(Chrome推奨)。';
+  }
+
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('session').style.display = 'block';
+
+  const lv = LEVELS.find(l=>l.id===selectedLevel);
+  const sc = SCENES.find(s=>s.id===selectedScene);
+  document.getElementById('tagLevel').textContent = lv.name;
+  document.getElementById('tagScene').textContent = sc.name;
+
+  if (!SR){
+    document.getElementById('kbRow').classList.add('show');
+    document.getElementById('micHint').textContent = 'キーボードで入力してください';
+    document.getElementById('micBtn').style.display = 'none';
+  }
+
+  await beginConversation(sc);
+});
+
+/* ===================== システムプロンプト ===================== */
+function buildSystemPrompt(sc){
+  if (sc.id === 'school_interview') return buildSchoolInterviewPrompt();
+
+  return `あなたは日本語学習者の会話練習の相手をするAIアバター「あかり」です。
+${LEVEL_INSTRUCTIONS[selectedLevel]}
+
+シーン設定: ${sc.prompt}
+
+返答のルール:
+- 返答は必ず日本語のみで書き、記号の羅列や英語の説明、括弧書きの注釈は入れない。
+- 声に出して話す会話として、1〜2文程度の短い返答にする。
+- 一方的に話しすぎず、必ず質問や相槌などで会話のキャッチボールを続ける。
+- 学習者の発話に文法や語彙の間違いがあっても、基本的には訂正せず自然に会話を続ける。学習者が明確に「直してください」等と訂正を求めた場合のみ、短く優しく訂正する。
+- ロールプレイの設定がある場合は、その役になりきって最後まで応対する。`;
+}
+
+/* 専門学校 面接対策専用のシステムプロンプト */
+function buildSchoolInterviewPrompt(){
+  const chosen = QUESTION_SETS.filter(c=>selectedCategories.has(c.id));
+  const questionListText = chosen.map(cat=>{
+    const qs = cat.questions.map((q,i)=>`  ${i+1}. ${q}`).join('\n');
+    return `【${cat.label}】\n${qs}`;
+  }).join('\n\n');
+
+  return `あなたは日本語学習者の面接練習の相手をするAIアバター「あかり」です。ここでは、専門学校の入学面接を担当する面接官として振る舞います。
+${LEVEL_INSTRUCTIONS[selectedLevel]}
+
+この面接では、以下の質問リストを、書かれている順番のとおりに、上から一つずつ聞いてください。
+${questionListText}
+
+進め方のルール:
+- 面接官らしい、丁寧で落ち着いた話し方をする(「〜です」「〜ですか」調)。
+- まず簡潔な挨拶と面接の開始のひとことから始め、その後リストの最初の質問に入る。
+- 学習者の回答を受けたら、その回答の内容を踏まえて深掘りする質問を最大1回だけ行ってよい(例:理由や具体例を尋ねる)。深掘りをしすぎて話が本題からずれないよう注意する。
+- 深掘りをしてもしなくても、そのやり取りが終わったら必ずリストの次の質問に進む。質問は飛ばさず、繰り返さず、リストの順番を守る。
+- リストにある質問をすべて終えたら、丁寧にお礼を述べて面接を締めくくる(例:本日はありがとうございました、など)。それ以降は新しい質問をしない。
+- 返答は必ず日本語のみで書き、記号の羅列や英語の説明、括弧書きの注釈は入れない。
+- 声に出して話す面接の会話として、1〜3文程度の長さにする。
+- 学習者の発話に文法や語彙の間違いがあっても、面接中は基本的に訂正せず自然に受け止める。`;
+}
+
+/* ===================== 会話の開始 ===================== */
+async function beginConversation(sc){
+  setState('thinking');
+  messages = [{ role:'user', content:'(会話を始めてください。設定に合わせて、挨拶や最初のひとことから話しかけてください。)' }];
+  const reply = await callClaude(messages, buildSystemPrompt(sc));
+  messages.push({ role:'assistant', content: reply });
+  addCaption('ai', reply);
+  await speak(reply);
+  setState('idle');
+}
+
+/* ===================== Claude API 呼び出し ===================== */
+async function callClaude(msgHistory, systemPrompt){
+  try{
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        system: systemPrompt,
+        messages: msgHistory
+      })
+    });
+    if (!response.ok){
+      console.error('API error status', response.status);
+      return 'すみません、少し調子が悪いようです。もう一度試してもらえますか。';
+    }
+    const data = await response.json();
+    const text = (data.content || []).map(b=>b.text||'').join('\n').trim();
+    return text || 'すみません、うまく聞き取れませんでした。もう一度お願いできますか。';
+  }catch(err){
+    console.error(err);
+    return 'すみません、少し調子が悪いようです。もう一度試してもらえますか。';
+  }
+}
+
+/* ===================== 発話(TTS) ===================== */
+function speak(text){
+  return new Promise(resolve=>{
+    if (!hasTTS){ resolve(); return; }
+    setState('speaking');
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'ja-JP';
+    if (jaVoice) utter.voice = jaVoice;
+    utter.rate = LEVEL_RATE[selectedLevel] || 1.0;
+    utter.onend = ()=>{ resolve(); };
+    utter.onerror = ()=>{ resolve(); };
+    speechSynthesis.speak(utter);
+  });
+}
+
+/* ===================== アバターの状態表示 ===================== */
+const avatarEl = document.getElementById('avatar');
+const statusEl = document.getElementById('statusText');
+function setState(state){
+  avatarEl.dataset.state = state;
+  const label = { idle:'待機中…', listening:'聞いています…', thinking:'考え中…', speaking:'話しています…' }[state] || '';
+  statusEl.textContent = label;
+  const micBtn = document.getElementById('micBtn');
+  if (micBtn){
+    micBtn.disabled = (state === 'thinking' || state === 'speaking');
+    micBtn.classList.toggle('recording', state==='listening');
+  }
+}
+
+/* ===================== 字幕表示 ===================== */
+const captionsEl = document.getElementById('captions');
+function addCaption(who, text){
+  const line = document.createElement('div');
+  line.className = 'caption-line ' + who;
+  line.innerHTML = `<span class="speaker">${who==='ai' ? 'あかり' : 'あなた'}</span>${escapeHtml(text)}`;
+  captionsEl.appendChild(line);
+  captionsEl.scrollTop = captionsEl.scrollHeight;
+}
+function escapeHtml(s){
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+/* ===================== マイク操作 ===================== */
+const micBtn = document.getElementById('micBtn');
+if (recognition){
+  micBtn.addEventListener('click', ()=>{
+    if (isRecording) return;
+    startListening();
+  });
+
+  recognition.onstart = ()=>{ isRecording = true; setState('listening'); };
+
+  recognition.onresult = (e)=>{
+    let interim = '';
+    let final = '';
+    for (let i=e.resultIndex; i<e.results.length; i++){
+      if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    if (final.trim()) handleUserUtterance(final.trim());
+  };
+
+  recognition.onerror = (e)=>{
+    console.warn('speech recognition error', e.error);
+    isRecording = false;
+    setState('idle');
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed'){
+      showSessionNotice('マイクの使用が許可されていません。ブラウザの設定でマイクを許可してください。');
+    }
+  };
+
+  recognition.onend = ()=>{
+    isRecording = false;
+    if (avatarEl.dataset.state === 'listening') setState('idle');
+  };
+}
+
+function startListening(){
+  try{ recognition.start(); }
+  catch(err){ console.warn(err); }
+}
+
+async function handleUserUtterance(text){
+  addCaption('user', text);
+  messages.push({ role:'user', content:text });
+  setState('thinking');
+  const sc = SCENES.find(s=>s.id===selectedScene);
+  const reply = await callClaude(messages, buildSystemPrompt(sc));
+  messages.push({ role:'assistant', content:reply });
+  addCaption('ai', reply);
+  await speak(reply);
+  setState('idle');
+}
+
+/* ===================== キーボード入力フォールバック ===================== */
+document.getElementById('kbToggle').addEventListener('click', ()=>{
+  document.getElementById('kbRow').classList.toggle('show');
+});
+document.getElementById('kbSend').addEventListener('click', sendKbInput);
+document.getElementById('kbInput').addEventListener('keydown', (e)=>{
+  if (e.key === 'Enter') sendKbInput();
+});
+function sendKbInput(){
+  const input = document.getElementById('kbInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  handleUserUtterance(text);
+}
+
+/* ===================== 終了 ===================== */
+document.getElementById('endBtn').addEventListener('click', ()=>{
+  if (hasTTS) speechSynthesis.cancel();
+  if (recognition && isRecording){ try{ recognition.stop(); }catch(e){} }
+  messages = [];
+  captionsEl.innerHTML = '';
+  document.getElementById('session').style.display = 'none';
+  document.getElementById('setup').style.display = 'block';
+  document.getElementById('kbRow').classList.remove('show');
+  document.getElementById('micBtn').style.display = 'flex';
+  document.getElementById('micHint').textContent = 'タップして話しかけてください';
+  setState('idle');
+  selectedCategories.clear();
+  document.querySelectorAll('#categoryGrid .scene-chip').forEach(c=>c.classList.remove('selected'));
+});
+
+function showSessionNotice(msg){
+  const n = document.getElementById('sessionNotice');
+  n.style.display = 'block';
+  n.textContent = msg;
+}
+</script>
+</body>
+</html>
