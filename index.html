@@ -857,12 +857,40 @@ function speak(text){
   return new Promise(resolve=>{
     if (!hasTTS){ resolve(); return; }
     setState('speaking');
+
+    // iPhoneのSafariでは、詰まっている古い読み上げが残っていることがあるため、
+    // 話し始める前に一度リセットしておく
+    try { speechSynthesis.cancel(); } catch(err) {}
+
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = 'ja-JP';
     if (jaVoice) utter.voice = jaVoice;
     utter.rate = SPEED_RATE[selectedSpeed] || 1.0;
-    utter.onend = ()=>{ resolve(); };
-    utter.onerror = ()=>{ resolve(); };
+
+    let finished = false;
+    const finish = ()=>{
+      if (finished) return;
+      finished = true;
+      clearInterval(watchdog);
+      clearTimeout(hardTimeout);
+      resolve();
+    };
+
+    utter.onend = finish;
+    utter.onerror = finish;
+
+    // iPhoneのSafariでは、読み上げが実際に終わっても「終わった」という
+    // 合図(onend)が来ないことがある。そのため、話し終わったかどうかを
+    // 定期的に自分で確認し、終わっていれば次に進めるようにする。
+    const watchdog = setInterval(()=>{
+      if (!speechSynthesis.speaking) finish();
+    }, 300);
+
+    // それでも検知できなかった場合の最終手段として、
+    // 文章の長さから見積もった時間を超えたら、強制的に次に進める。
+    const estimatedMs = Math.max(4000, text.length * 220);
+    const hardTimeout = setTimeout(finish, estimatedMs);
+
     speechSynthesis.speak(utter);
   });
 }
